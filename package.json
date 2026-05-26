@@ -1,0 +1,9 @@
+{
+  "name": "int-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal dashboard for frequently used self-made websites.",
+  "scripts": {
+    "dev": "node tools/dev-server.mjs"
+  }
+}

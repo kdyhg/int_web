@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="자주 사용하는 개인 제작 사이트를 한 곳에서 관리하는 통합 웹 대시보드"
+    />
+    <title>Int Web Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Personal site hub</p>
+          <h1>Int Web Dashboard</h1>
+        </div>
+        <div class="topbar-actions">
+          <button class="ghost-button" id="focusSearchButton" type="button">검색</button>
+          <a class="primary-button" href="data/sites.json" target="_blank" rel="noreferrer">
+            사이트 데이터
+          </a>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero-panel">
+          <div class="hero-copy">
+            <p class="eyebrow">Unified launcher</p>
+            <h2>내가 만든 사이트를 빠르게 찾고, 상태까지 한눈에 봅니다.</h2>
+            <p>
+              운영 중인 사이트, 관리자 페이지, 저장소, 문서를 한 카드에 묶었습니다.
+              `data/sites.json`만 고치면 내 사이트 목록으로 바로 바꿀 수 있습니다.
+            </p>
+          </div>
+          <div class="hero-search">
+            <label for="siteSearch">사이트 검색</label>
+            <input
+              id="siteSearch"
+              type="search"
+              placeholder="사이트명, 태그, 설명으로 검색"
+              autocomplete="off"
+            />
+            <span class="shortcut">Ctrl + K</span>
+          </div>
+        </section>
+
+        <section class="metrics-grid" aria-label="대시보드 요약">
+          <article>
+            <span>전체 사이트</span>
+            <strong id="totalCount">0</strong>
+          </article>
+          <article>
+            <span>즐겨찾기</span>
+            <strong id="favoriteCount">0</strong>
+          </article>
+          <article>
+            <span>최근 방문</span>
+            <strong id="recentCount">0</strong>
+          </article>
+          <article>
+            <span>마지막 동기화</span>
+            <strong id="syncTime">-</strong>
+          </article>
+        </section>
+
+        <section class="workspace">
+          <aside class="sidebar" aria-label="사이트 필터">
+            <div>
+              <p class="section-label">카테고리</p>
+              <div class="filter-list" id="categoryFilters"></div>
+            </div>
+            <div>
+              <p class="section-label">빠른 보기</p>
+              <div class="filter-list">
+                <button class="filter-button active" type="button" data-view="all">전체</button>
+                <button class="filter-button" type="button" data-view="favorites">즐겨찾기</button>
+                <button class="filter-button" type="button" data-view="recent">최근 방문</button>
+              </div>
+            </div>
+          </aside>
+
+          <section class="site-area" aria-live="polite">
+            <div class="section-heading">
+              <div>
+                <p class="section-label">Sites</p>
+                <h2 id="resultTitle">전체 사이트</h2>
+              </div>
+              <span id="resultCount">0개</span>
+            </div>
+            <div class="site-grid" id="siteGrid"></div>
+            <div class="empty-state hidden" id="emptyState">
+              <strong>조건에 맞는 사이트가 없습니다.</strong>
+              <p>검색어를 줄이거나 다른 카테고리를 선택해보세요.</p>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <template id="siteCardTemplate">
+      <article class="site-card">
+        <div class="card-header">
+          <div>
+            <span class="category-pill"></span>
+            <h3></h3>
+          </div>
+          <button class="favorite-button" type="button" aria-label="즐겨찾기 토글"></button>
+        </div>
+        <p class="description"></p>
+        <div class="tag-list"></div>
+        <p class="memo"></p>
+        <div class="status-row">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span class="status-text">상태 미확인</span>
+        </div>
+        <div class="card-actions"></div>
+      </article>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>

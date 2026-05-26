@@ -1,0 +1,43 @@
+{
+  "sites": [
+    {
+      "id": "portfolio",
+      "name": "Portfolio",
+      "description": "개인 포트폴리오와 프로젝트 소개를 모아둔 공개 사이트",
+      "category": "production",
+      "tags": ["portfolio", "public", "profile"],
+      "url": "https://example.com",
+      "adminUrl": "",
+      "repoUrl": "https://github.com/kdyhg",
+      "docsUrl": "",
+      "healthUrl": "https://example.com",
+      "memo": "새 프로젝트를 올린 뒤 첫 화면과 모바일 레이아웃을 확인합니다."
+    },
+    {
+      "id": "blog",
+      "name": "Tech Blog",
+      "description": "개발 기록과 학습 노트를 정리하는 블로그",
+      "category": "content",
+      "tags": ["blog", "writing", "docs"],
+      "url": "https://example.com/blog",
+      "adminUrl": "https://example.com/admin",
+      "repoUrl": "",
+      "docsUrl": "",
+      "healthUrl": "https://example.com/blog",
+      "memo": "글 작성 전 임시 저장 여부와 이미지 경로를 확인합니다."
+    },
+    {
+      "id": "lab",
+      "name": "Web Lab",
+      "description": "실험 중인 웹 도구와 테스트 배포를 모아둔 공간",
+      "category": "lab",
+      "tags": ["experiment", "tool", "staging"],
+      "url": "https://example.com/lab",
+      "adminUrl": "",
+      "repoUrl": "https://github.com/kdyhg/Int_web",
+      "docsUrl": "",
+      "healthUrl": "https://example.com/lab",
+      "memo": "실험용 링크는 공개 범위를 다시 확인합니다."
+    }
+  ]
+}
