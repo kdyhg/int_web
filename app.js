@@ -71,8 +71,10 @@ const elements = {
   favoriteCount: document.querySelector("#favoriteCount"),
   recentCount: document.querySelector("#recentCount"),
   focusSearchButton: document.querySelector("#focusSearchButton"),
+  mobileFocusSearchButton: document.querySelector("#mobileFocusSearchButton"),
   openCreateButton: document.querySelector("#openCreateButton"),
   openCreateTopButton: document.querySelector("#openCreateTopButton"),
+  mobileCreateButton: document.querySelector("#mobileCreateButton"),
   emptyCreateButton: document.querySelector("#emptyCreateButton"),
   exportButton: document.querySelector("#exportButton"),
   importFile: document.querySelector("#importFile"),
@@ -610,9 +612,16 @@ elements.search.addEventListener("input", (event) => {
   render();
 });
 
-elements.focusSearchButton.addEventListener("click", () => elements.search.focus());
+function focusSearch() {
+  elements.search.focus();
+  elements.search.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+elements.focusSearchButton.addEventListener("click", focusSearch);
+elements.mobileFocusSearchButton.addEventListener("click", focusSearch);
 elements.openCreateButton.addEventListener("click", () => openEditor());
 elements.openCreateTopButton.addEventListener("click", () => openEditor());
+elements.mobileCreateButton.addEventListener("click", () => openEditor());
 elements.emptyCreateButton.addEventListener("click", () => openEditor());
 elements.exportButton.addEventListener("click", exportSites);
 elements.importFile.addEventListener("change", importSites);
