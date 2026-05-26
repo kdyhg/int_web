@@ -1,30 +1,10 @@
-const config = window.INT_WEB_CONFIG || {};
-const sheetId = config.sheetId || "1biZUbR5uY654A8WShsdMdzn5Y-bPudODo-GsIYu9YFo";
-const sheetGid = config.gid || "0";
-const sheetUrl =
-  config.sheetUrl ||
-  `https://docs.google.com/spreadsheets/d/${sheetId}/edit?gid=${sheetGid}#gid=${sheetGid}`;
-const apiUrl = (config.apiUrl || "").trim();
+const sitesApiUrl = "/api/sites";
 
 const storageKeys = {
   favorites: "intweb:favorites",
   recent: "intweb:recent",
+  writeToken: "intweb:writeToken",
 };
-
-const sheetHeaders = [
-  "id",
-  "name",
-  "description",
-  "category",
-  "tags",
-  "url",
-  "adminUrl",
-  "repoUrl",
-  "docsUrl",
-  "healthUrl",
-  "imageUrl",
-  "memo",
-];
 
 const fallbackSites = [
   {
@@ -77,8 +57,6 @@ const state = {
   category: "all",
   view: "all",
   editingId: null,
-  loading: false,
-  loadError: "",
   favorites: new Set(readJson(storageKeys.favorites, [])),
   recent: readJson(storageKeys.recent, []),
 };
@@ -123,29 +101,20 @@ const categoryLabels = {
 };
 
 async function loadSites(options = {}) {
-  state.loading = true;
-  state.loadError = "";
-  setSyncStatus("Google Sheets에서 사이트 목록을 불러오는 중...");
+  setSyncStatus("API에서 Google Sheets 목록을 불러오는 중...");
 
   try {
-    const sites = apiUrl ? await listSitesFromApi() : await listSitesFromPublicSheet();
-    state.sites = normalizeSiteList(sites);
-    setSyncStatus(apiUrl ? "Google Sheets API와 동기화됨" : "공개 Google Sheets에서 읽는 중");
+    const data = await apiRequest("GET");
+    state.sites = normalizeSiteList(data.sites || []);
+    setSyncStatus("Google Sheets API와 동기화됨");
   } catch (error) {
-    state.loadError = error.message;
     state.sites = normalizeSiteList(await loadDefaultSites());
-    setSyncStatus(
-      apiUrl
-        ? `시트 API 연결 실패: ${error.message}`
-        : `시트 읽기 실패: Google Sheets 공유/게시 설정 또는 Apps Script API URL을 확인하세요.`,
-      true,
-    );
-  } finally {
-    state.loading = false;
-    cleanStoredReferences();
-    renderCategories();
-    render();
+    setSyncStatus(`API 연결 실패: ${error.message}`, true);
   }
+
+  cleanStoredReferences();
+  renderCategories();
+  render();
 
   if (!options.silent) {
     updateStorageLabel();
@@ -167,152 +136,56 @@ async function loadDefaultSites() {
   }
 }
 
-async function listSitesFromApi() {
-  const data = await jsonpRequest(apiUrl, { action: "list" });
-  if (!data.ok) {
-    throw new Error(data.error || "시트 API가 목록을 반환하지 않았습니다.");
-  }
-
-  return Array.isArray(data.sites) ? data.sites : [];
-}
-
-async function listSitesFromPublicSheet() {
-  const url = new URL(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq`);
-  url.searchParams.set("tqx", "out:json");
-  url.searchParams.set("gid", sheetGid);
-  url.searchParams.set("headers", "1");
-
-  const response = await fetch(url.toString(), { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error("공개 시트를 읽을 수 없습니다.");
-  }
-
-  const rawText = await response.text();
-  return parseGoogleVisualizationResponse(rawText);
-}
-
-function parseGoogleVisualizationResponse(rawText) {
-  const start = rawText.indexOf("{");
-  const end = rawText.lastIndexOf("}");
-
-  if (start === -1 || end === -1) {
-    throw new Error("Google Sheets 응답 형식이 올바르지 않습니다.");
-  }
-
-  const payload = JSON.parse(rawText.slice(start, end + 1));
-  const table = payload.table;
-
-  if (!table || !Array.isArray(table.cols) || !Array.isArray(table.rows)) {
-    throw new Error("시트 테이블을 찾을 수 없습니다.");
-  }
-
-  const keys = table.cols.map((column, index) => getCanonicalKey(column.label || sheetHeaders[index] || ""));
-
-  return table.rows
-    .map((row) => {
-      const site = {};
-      (row.c || []).forEach((cell, index) => {
-        const key = keys[index];
-        if (!key) return;
-        site[key] = cell && cell.v != null ? String(cell.v) : "";
-      });
-      return site;
-    })
-    .filter((site) => site.name || site.url);
-}
-
-function getCanonicalKey(header) {
-  const normalized = String(header || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_-]+/g, "");
-
-  const aliases = {
-    id: "id",
-    name: "name",
-    title: "name",
-    sitename: "name",
-    이름: "name",
-    사이트명: "name",
-    사이트이름: "name",
-    description: "description",
-    desc: "description",
-    설명: "description",
-    category: "category",
-    카테고리: "category",
-    tags: "tags",
-    tag: "tags",
-    태그: "tags",
-    url: "url",
-    대표url: "url",
-    링크: "url",
-    adminurl: "adminUrl",
-    관리자url: "adminUrl",
-    repourl: "repoUrl",
-    githuburl: "repoUrl",
-    github: "repoUrl",
-    docsurl: "docsUrl",
-    문서url: "docsUrl",
-    healthurl: "healthUrl",
-    상태확인url: "healthUrl",
-    imageurl: "imageUrl",
-    이미지url: "imageUrl",
-    카드이미지url: "imageUrl",
-    memo: "memo",
-    메모: "memo",
+async function apiRequest(method, payload, options = {}) {
+  const requestOptions = {
+    method,
+    headers: {},
   };
 
-  return aliases[normalized] || "";
-}
-
-function jsonpRequest(endpoint, params = {}) {
-  return new Promise((resolve, reject) => {
-    const callbackName = `intWebJsonp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const script = document.createElement("script");
-    const timeout = window.setTimeout(() => {
-      cleanup();
-      reject(new Error("시트 API 응답 시간이 초과되었습니다."));
-    }, 12000);
-
-    function cleanup() {
-      window.clearTimeout(timeout);
-      delete window[callbackName];
-      script.remove();
-    }
-
-    window[callbackName] = (data) => {
-      cleanup();
-      resolve(data);
-    };
-
-    const url = new URL(endpoint);
-    Object.entries(params).forEach(([key, value]) => {
-      url.searchParams.set(key, value);
-    });
-    url.searchParams.set("callback", callbackName);
-
-    script.onerror = () => {
-      cleanup();
-      reject(new Error("시트 API 스크립트를 불러오지 못했습니다."));
-    };
-    script.src = url.toString();
-    document.head.append(script);
-  });
-}
-
-async function postToSheet(action, payload = {}) {
-  if (!apiUrl) {
-    throw new Error("config.js의 apiUrl에 Google Apps Script 웹앱 URL을 설정해야 저장할 수 있습니다.");
+  if (payload) {
+    requestOptions.headers["Content-Type"] = "application/json";
+    requestOptions.body = JSON.stringify(payload);
   }
 
-  await fetch(apiUrl, {
-    method: "POST",
-    mode: "no-cors",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8",
-    },
-    body: JSON.stringify({ action, ...payload }),
-  });
+  if (method !== "GET") {
+    const token = getWriteToken();
+    if (token) {
+      requestOptions.headers["x-int-web-token"] = token;
+    }
+  }
+
+  const response = await fetch(sitesApiUrl, requestOptions);
+
+  if (response.status === 401 && method !== "GET" && options.retryAuth !== false) {
+    const token = window.prompt("사이트 목록을 수정하려면 관리 토큰을 입력하세요.");
+    if (token) {
+      setWriteToken(token);
+      return apiRequest(method, payload, { retryAuth: false });
+    }
+  }
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.error || `API 요청 실패 (${response.status})`);
+  }
+
+  return data;
+}
+
+function getWriteToken() {
+  try {
+    return window.sessionStorage.getItem(storageKeys.writeToken) || "";
+  } catch {
+    return "";
+  }
+}
+
+function setWriteToken(token) {
+  try {
+    window.sessionStorage.setItem(storageKeys.writeToken, token);
+  } catch {
+    return;
+  }
 }
 
 function readJson(key, fallback) {
@@ -640,8 +513,6 @@ function getResultTitle() {
 }
 
 function openEditor(site = null) {
-  if (!canWriteToSheet()) return;
-
   state.editingId = site ? site.id : null;
   elements.dialogTitle.textContent = site ? "사이트 수정" : "사이트 추가";
   elements.form.reset();
@@ -694,7 +565,6 @@ function closeEditor() {
 
 async function handleFormSubmit(event) {
   event.preventDefault();
-  if (!canWriteToSheet()) return;
 
   const formData = new FormData(elements.form);
   const rawSite = Object.fromEntries(formData.entries());
@@ -706,10 +576,10 @@ async function handleFormSubmit(event) {
   const baseId = existing ? existing.id : createSlug(site.name);
   site.id = makeUniqueId(baseId, usedIds, existing ? existing.id : "");
 
-  setSyncStatus("Google Sheets에 저장 요청 중...");
+  setSyncStatus("API를 통해 Google Sheets에 저장 중...");
 
   try {
-    await postToSheet("upsert", { site });
+    await apiRequest(existing ? "PUT" : "POST", { site });
 
     if (existing) {
       state.sites = state.sites.map((item) => (item.id === existing.id ? site : item));
@@ -720,7 +590,7 @@ async function handleFormSubmit(event) {
     renderCategories();
     render();
     closeEditor();
-    setSyncStatus("저장 요청 완료. 시트 반영 후 자동 새로고침합니다.");
+    setSyncStatus("저장 완료. Google Sheets와 동기화했습니다.");
     scheduleSheetRefresh();
   } catch (error) {
     setSyncStatus(error.message, true);
@@ -729,18 +599,16 @@ async function handleFormSubmit(event) {
 }
 
 async function deleteSite(siteId) {
-  if (!canWriteToSheet()) return;
-
   const site = state.sites.find((item) => item.id === siteId);
   if (!site) return;
 
   const confirmed = window.confirm(`"${site.name}" 사이트를 삭제할까요?`);
   if (!confirmed) return;
 
-  setSyncStatus("Google Sheets에 삭제 요청 중...");
+  setSyncStatus("API를 통해 Google Sheets에서 삭제 중...");
 
   try {
-    await postToSheet("delete", { id: siteId });
+    await apiRequest("DELETE", { id: siteId });
     state.sites = state.sites.filter((item) => item.id !== siteId);
     state.favorites.delete(siteId);
     state.recent = state.recent.filter((id) => id !== siteId);
@@ -753,7 +621,7 @@ async function deleteSite(siteId) {
 
     renderCategories();
     render();
-    setSyncStatus("삭제 요청 완료. 시트 반영 후 자동 새로고침합니다.");
+    setSyncStatus("삭제 완료. Google Sheets와 동기화했습니다.");
     scheduleSheetRefresh();
   } catch (error) {
     setSyncStatus(error.message, true);
@@ -776,11 +644,6 @@ async function importSites(event) {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  if (!canWriteToSheet()) {
-    event.target.value = "";
-    return;
-  }
-
   try {
     const rawText = await file.text();
     const parsed = JSON.parse(rawText);
@@ -791,7 +654,7 @@ async function importSites(event) {
     }
 
     const sites = normalizeSiteList(importedSites);
-    await postToSheet("replaceAll", { sites });
+    await apiRequest("POST", { action: "replaceAll", sites });
     state.sites = sites;
     cleanStoredReferences();
     renderCategories();
@@ -810,20 +673,10 @@ async function refreshSitesFromSheet() {
   await loadSites({ silent: true });
 }
 
-function canWriteToSheet() {
-  if (apiUrl) return true;
-
-  const message =
-    "사이트 추가/수정/삭제를 모든 기기에 반영하려면 config.js의 apiUrl에 Google Apps Script 웹앱 URL을 설정해야 합니다.";
-  setSyncStatus(message, true);
-  window.alert(message);
-  return false;
-}
-
 function scheduleSheetRefresh() {
   window.setTimeout(() => {
     loadSites({ silent: true });
-  }, 1500);
+  }, 1200);
 }
 
 function setSyncStatus(message, isError = false) {
@@ -834,7 +687,7 @@ function setSyncStatus(message, isError = false) {
 
 function updateStorageLabel() {
   if (!elements.storageLabel) return;
-  elements.storageLabel.textContent = apiUrl ? "Sheet API" : "Sheet";
+  elements.storageLabel.textContent = "API";
 }
 
 function focusSearch() {

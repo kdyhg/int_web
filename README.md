@@ -1,10 +1,10 @@
 # Int_web
 
-Google Sheets와 연결해 어느 기기에서든 같은 사이트 목록을 볼 수 있는 개인 통합 웹 대시보드입니다.
+Google Sheets API와 연결해 어느 기기에서든 같은 사이트 목록을 볼 수 있는 개인 통합 웹 대시보드입니다.
 
 ## 주요 기능
 
-- Google Sheets 기반 사이트 목록 동기화
+- `/api/sites` 서버 API 기반 Google Sheets 동기화
 - 카드형 사이트 런처
 - 사이트 추가, 수정, 삭제
 - JSON 가져오기와 내보내기
@@ -17,39 +17,45 @@ Google Sheets와 연결해 어느 기기에서든 같은 사이트 목록을 볼
 
 ## 실행 방법
 
-의존성이 없는 정적 웹앱입니다. Node.js가 있으면 바로 실행할 수 있습니다.
+정적 프론트엔드는 Node.js로 바로 확인할 수 있습니다.
 
 ```bash
 npm run dev
 ```
 
-브라우저에서 `http://localhost:4173`을 열면 됩니다.
+브라우저에서 `http://localhost:4173`을 열면 됩니다. 로컬 정적 서버는 `/api/sites`를 실행하지 않으므로, API 검증은 Vercel 같은 서버리스 환경에서 확인하세요.
 
-## Google Sheets 연결
+## API 구조
 
-`config.js`에는 요청한 Google Sheets ID가 이미 들어 있습니다.
+프론트엔드는 같은 도메인의 `/api/sites`만 호출합니다.
 
-```js
-window.INT_WEB_CONFIG = {
-  sheetId: "1biZUbR5uY654A8WShsdMdzn5Y-bPudODo-GsIYu9YFo",
-  gid: "0",
-  apiUrl: ""
-};
+```text
+GET    /api/sites              목록 조회
+POST   /api/sites              사이트 추가
+PUT    /api/sites              사이트 수정
+DELETE /api/sites              사이트 삭제
+POST   /api/sites replaceAll   JSON 가져오기로 전체 교체
 ```
 
-읽기만 필요하면 시트를 공개 또는 게시해두면 앱이 Google Sheets에서 목록을 읽어옵니다. 사이트 추가, 수정, 삭제까지 앱에서 하려면 Google Apps Script 웹앱 URL을 `apiUrl`에 넣어야 합니다.
+## Google Sheets 설정
 
-## Apps Script 배포
+API는 Google 서비스 계정으로 Sheets API를 호출합니다. Google Cloud에서 서비스 계정을 만들고, 대상 스프레드시트를 서비스 계정 이메일에 공유하세요.
 
-1. Google Sheets에서 `확장 프로그램 > Apps Script`를 엽니다.
-2. `google-apps-script/Code.gs` 내용을 붙여 넣습니다.
-3. `배포 > 새 배포 > 웹 앱`을 선택합니다.
-4. 실행 권한은 본인, 액세스 권한은 앱을 사용할 범위에 맞게 설정합니다.
-5. 배포 후 생성된 웹 앱 URL을 `config.js`의 `apiUrl`에 붙여 넣습니다.
+필요한 환경변수:
+
+```text
+GOOGLE_SERVICE_ACCOUNT_EMAIL=service-account@project.iam.gserviceaccount.com
+GOOGLE_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n
+GOOGLE_SHEETS_ID=1biZUbR5uY654A8WShsdMdzn5Y-bPudODo-GsIYu9YFo
+GOOGLE_SHEET_GID=0
+INT_WEB_WRITE_TOKEN=선택사항_쓰기_보호_토큰
+```
+
+`INT_WEB_WRITE_TOKEN`을 설정하면 추가, 수정, 삭제 때 관리 토큰을 묻습니다. 읽기는 토큰 없이 가능합니다.
 
 ## 시트 헤더
 
-첫 번째 행은 아래 헤더를 권장합니다.
+첫 번째 행은 아래 헤더를 권장합니다. API가 비어 있는 시트에는 자동으로 헤더를 생성합니다.
 
 ```text
 id, name, description, category, tags, url, adminUrl, repoUrl, docsUrl, healthUrl, imageUrl, memo
@@ -57,4 +63,4 @@ id, name, description, category, tags, url, adminUrl, repoUrl, docsUrl, healthUr
 
 ## 배포 메모
 
-정적 파일만으로 동작하므로 GitHub Pages, Vercel, Netlify에 배포할 수 있습니다. 개인용으로 공개 인터넷에 배포할 경우, 플랫폼의 인증 보호나 별도 로그인 레이어를 붙이는 것을 권장합니다.
+`api/sites.js`는 Vercel Serverless Function 형태입니다. Vercel에 배포한 뒤 프로젝트 환경변수에 위 값을 넣으면, 모든 기기에서 같은 Google Sheets 데이터를 보게 됩니다.
