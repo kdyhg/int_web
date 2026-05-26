@@ -1,8 +1,30 @@
+const config = window.INT_WEB_CONFIG || {};
+const sheetId = config.sheetId || "1biZUbR5uY654A8WShsdMdzn5Y-bPudODo-GsIYu9YFo";
+const sheetGid = config.gid || "0";
+const sheetUrl =
+  config.sheetUrl ||
+  `https://docs.google.com/spreadsheets/d/${sheetId}/edit?gid=${sheetGid}#gid=${sheetGid}`;
+const apiUrl = (config.apiUrl || "").trim();
+
 const storageKeys = {
-  sites: "intweb:sites",
   favorites: "intweb:favorites",
   recent: "intweb:recent",
 };
+
+const sheetHeaders = [
+  "id",
+  "name",
+  "description",
+  "category",
+  "tags",
+  "url",
+  "adminUrl",
+  "repoUrl",
+  "docsUrl",
+  "healthUrl",
+  "imageUrl",
+  "memo",
+];
 
 const fallbackSites = [
   {
@@ -55,6 +77,8 @@ const state = {
   category: "all",
   view: "all",
   editingId: null,
+  loading: false,
+  loadError: "",
   favorites: new Set(readJson(storageKeys.favorites, [])),
   recent: readJson(storageKeys.recent, []),
 };
@@ -70,6 +94,8 @@ const elements = {
   totalCount: document.querySelector("#totalCount"),
   favoriteCount: document.querySelector("#favoriteCount"),
   recentCount: document.querySelector("#recentCount"),
+  storageLabel: document.querySelector("#storageLabel"),
+  syncStatus: document.querySelector("#syncStatus"),
   focusSearchButton: document.querySelector("#focusSearchButton"),
   mobileFocusSearchButton: document.querySelector("#mobileFocusSearchButton"),
   openCreateButton: document.querySelector("#openCreateButton"),
@@ -96,18 +122,34 @@ const categoryLabels = {
   docs: "문서",
 };
 
-async function loadSites() {
-  const storedSites = readJson(storageKeys.sites, null);
+async function loadSites(options = {}) {
+  state.loading = true;
+  state.loadError = "";
+  setSyncStatus("Google Sheets에서 사이트 목록을 불러오는 중...");
 
-  if (Array.isArray(storedSites)) {
-    state.sites = normalizeSiteList(storedSites);
-  } else {
+  try {
+    const sites = apiUrl ? await listSitesFromApi() : await listSitesFromPublicSheet();
+    state.sites = normalizeSiteList(sites);
+    setSyncStatus(apiUrl ? "Google Sheets API와 동기화됨" : "공개 Google Sheets에서 읽는 중");
+  } catch (error) {
+    state.loadError = error.message;
     state.sites = normalizeSiteList(await loadDefaultSites());
+    setSyncStatus(
+      apiUrl
+        ? `시트 API 연결 실패: ${error.message}`
+        : `시트 읽기 실패: Google Sheets 공유/게시 설정 또는 Apps Script API URL을 확인하세요.`,
+      true,
+    );
+  } finally {
+    state.loading = false;
+    cleanStoredReferences();
+    renderCategories();
+    render();
   }
 
-  cleanStoredReferences();
-  renderCategories();
-  render();
+  if (!options.silent) {
+    updateStorageLabel();
+  }
 }
 
 async function loadDefaultSites() {
@@ -123,6 +165,154 @@ async function loadDefaultSites() {
     console.info("Fallback site data loaded:", error.message);
     return fallbackSites;
   }
+}
+
+async function listSitesFromApi() {
+  const data = await jsonpRequest(apiUrl, { action: "list" });
+  if (!data.ok) {
+    throw new Error(data.error || "시트 API가 목록을 반환하지 않았습니다.");
+  }
+
+  return Array.isArray(data.sites) ? data.sites : [];
+}
+
+async function listSitesFromPublicSheet() {
+  const url = new URL(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq`);
+  url.searchParams.set("tqx", "out:json");
+  url.searchParams.set("gid", sheetGid);
+  url.searchParams.set("headers", "1");
+
+  const response = await fetch(url.toString(), { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("공개 시트를 읽을 수 없습니다.");
+  }
+
+  const rawText = await response.text();
+  return parseGoogleVisualizationResponse(rawText);
+}
+
+function parseGoogleVisualizationResponse(rawText) {
+  const start = rawText.indexOf("{");
+  const end = rawText.lastIndexOf("}");
+
+  if (start === -1 || end === -1) {
+    throw new Error("Google Sheets 응답 형식이 올바르지 않습니다.");
+  }
+
+  const payload = JSON.parse(rawText.slice(start, end + 1));
+  const table = payload.table;
+
+  if (!table || !Array.isArray(table.cols) || !Array.isArray(table.rows)) {
+    throw new Error("시트 테이블을 찾을 수 없습니다.");
+  }
+
+  const keys = table.cols.map((column, index) => getCanonicalKey(column.label || sheetHeaders[index] || ""));
+
+  return table.rows
+    .map((row) => {
+      const site = {};
+      (row.c || []).forEach((cell, index) => {
+        const key = keys[index];
+        if (!key) return;
+        site[key] = cell && cell.v != null ? String(cell.v) : "";
+      });
+      return site;
+    })
+    .filter((site) => site.name || site.url);
+}
+
+function getCanonicalKey(header) {
+  const normalized = String(header || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+
+  const aliases = {
+    id: "id",
+    name: "name",
+    title: "name",
+    sitename: "name",
+    이름: "name",
+    사이트명: "name",
+    사이트이름: "name",
+    description: "description",
+    desc: "description",
+    설명: "description",
+    category: "category",
+    카테고리: "category",
+    tags: "tags",
+    tag: "tags",
+    태그: "tags",
+    url: "url",
+    대표url: "url",
+    링크: "url",
+    adminurl: "adminUrl",
+    관리자url: "adminUrl",
+    repourl: "repoUrl",
+    githuburl: "repoUrl",
+    github: "repoUrl",
+    docsurl: "docsUrl",
+    문서url: "docsUrl",
+    healthurl: "healthUrl",
+    상태확인url: "healthUrl",
+    imageurl: "imageUrl",
+    이미지url: "imageUrl",
+    카드이미지url: "imageUrl",
+    memo: "memo",
+    메모: "memo",
+  };
+
+  return aliases[normalized] || "";
+}
+
+function jsonpRequest(endpoint, params = {}) {
+  return new Promise((resolve, reject) => {
+    const callbackName = `intWebJsonp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const script = document.createElement("script");
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("시트 API 응답 시간이 초과되었습니다."));
+    }, 12000);
+
+    function cleanup() {
+      window.clearTimeout(timeout);
+      delete window[callbackName];
+      script.remove();
+    }
+
+    window[callbackName] = (data) => {
+      cleanup();
+      resolve(data);
+    };
+
+    const url = new URL(endpoint);
+    Object.entries(params).forEach(([key, value]) => {
+      url.searchParams.set(key, value);
+    });
+    url.searchParams.set("callback", callbackName);
+
+    script.onerror = () => {
+      cleanup();
+      reject(new Error("시트 API 스크립트를 불러오지 못했습니다."));
+    };
+    script.src = url.toString();
+    document.head.append(script);
+  });
+}
+
+async function postToSheet(action, payload = {}) {
+  if (!apiUrl) {
+    throw new Error("config.js의 apiUrl에 Google Apps Script 웹앱 URL을 설정해야 저장할 수 있습니다.");
+  }
+
+  await fetch(apiUrl, {
+    method: "POST",
+    mode: "no-cors",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8",
+    },
+    body: JSON.stringify({ action, ...payload }),
+  });
 }
 
 function readJson(key, fallback) {
@@ -150,13 +340,6 @@ function writeJson(key, value) {
   if (!storage) return;
 
   storage.setItem(key, JSON.stringify(value));
-}
-
-function removeStoredItem(key) {
-  const storage = getStorage();
-  if (!storage) return;
-
-  storage.removeItem(key);
 }
 
 function normalizeSiteList(sites) {
@@ -225,10 +408,6 @@ function makeUniqueId(baseId, usedIds, currentId = "") {
   return candidate;
 }
 
-function saveSites() {
-  writeJson(storageKeys.sites, state.sites);
-}
-
 function saveFavorites() {
   writeJson(storageKeys.favorites, [...state.favorites]);
 }
@@ -281,6 +460,7 @@ function render() {
   elements.totalCount.textContent = state.sites.length;
   elements.favoriteCount.textContent = state.favorites.size;
   elements.recentCount.textContent = state.recent.length;
+  updateStorageLabel();
 
   document.querySelectorAll("[data-category]").forEach((button) => {
     button.classList.toggle("active", button.dataset.category === state.category);
@@ -460,6 +640,8 @@ function getResultTitle() {
 }
 
 function openEditor(site = null) {
+  if (!canWriteToSheet()) return;
+
   state.editingId = site ? site.id : null;
   elements.dialogTitle.textContent = site ? "사이트 수정" : "사이트 추가";
   elements.form.reset();
@@ -510,8 +692,9 @@ function closeEditor() {
   elements.dialog.close();
 }
 
-function handleFormSubmit(event) {
+async function handleFormSubmit(event) {
   event.preventDefault();
+  if (!canWriteToSheet()) return;
 
   const formData = new FormData(elements.form);
   const rawSite = Object.fromEntries(formData.entries());
@@ -523,38 +706,59 @@ function handleFormSubmit(event) {
   const baseId = existing ? existing.id : createSlug(site.name);
   site.id = makeUniqueId(baseId, usedIds, existing ? existing.id : "");
 
-  if (existing) {
-    state.sites = state.sites.map((item) => (item.id === existing.id ? site : item));
-  } else {
-    state.sites = [site, ...state.sites];
-  }
+  setSyncStatus("Google Sheets에 저장 요청 중...");
 
-  saveSites();
-  renderCategories();
-  render();
-  closeEditor();
+  try {
+    await postToSheet("upsert", { site });
+
+    if (existing) {
+      state.sites = state.sites.map((item) => (item.id === existing.id ? site : item));
+    } else {
+      state.sites = [site, ...state.sites];
+    }
+
+    renderCategories();
+    render();
+    closeEditor();
+    setSyncStatus("저장 요청 완료. 시트 반영 후 자동 새로고침합니다.");
+    scheduleSheetRefresh();
+  } catch (error) {
+    setSyncStatus(error.message, true);
+    window.alert(error.message);
+  }
 }
 
-function deleteSite(siteId) {
+async function deleteSite(siteId) {
+  if (!canWriteToSheet()) return;
+
   const site = state.sites.find((item) => item.id === siteId);
   if (!site) return;
 
   const confirmed = window.confirm(`"${site.name}" 사이트를 삭제할까요?`);
   if (!confirmed) return;
 
-  state.sites = state.sites.filter((item) => item.id !== siteId);
-  state.favorites.delete(siteId);
-  state.recent = state.recent.filter((id) => id !== siteId);
-  saveSites();
-  saveFavorites();
-  saveRecent();
+  setSyncStatus("Google Sheets에 삭제 요청 중...");
 
-  if (state.editingId === siteId && elements.dialog.open) {
-    closeEditor();
+  try {
+    await postToSheet("delete", { id: siteId });
+    state.sites = state.sites.filter((item) => item.id !== siteId);
+    state.favorites.delete(siteId);
+    state.recent = state.recent.filter((id) => id !== siteId);
+    saveFavorites();
+    saveRecent();
+
+    if (state.editingId === siteId && elements.dialog.open) {
+      closeEditor();
+    }
+
+    renderCategories();
+    render();
+    setSyncStatus("삭제 요청 완료. 시트 반영 후 자동 새로고침합니다.");
+    scheduleSheetRefresh();
+  } catch (error) {
+    setSyncStatus(error.message, true);
+    window.alert(error.message);
   }
-
-  renderCategories();
-  render();
 }
 
 function exportSites() {
@@ -572,6 +776,11 @@ async function importSites(event) {
   const file = event.target.files?.[0];
   if (!file) return;
 
+  if (!canWriteToSheet()) {
+    event.target.value = "";
+    return;
+  }
+
   try {
     const rawText = await file.text();
     const parsed = JSON.parse(rawText);
@@ -581,41 +790,62 @@ async function importSites(event) {
       throw new Error("sites 배열이 없습니다.");
     }
 
-    state.sites = normalizeSiteList(importedSites);
-    saveSites();
+    const sites = normalizeSiteList(importedSites);
+    await postToSheet("replaceAll", { sites });
+    state.sites = sites;
     cleanStoredReferences();
     renderCategories();
     render();
+    setSyncStatus("JSON 목록을 Google Sheets로 교체했습니다.");
+    scheduleSheetRefresh();
   } catch (error) {
+    setSyncStatus(`가져오기에 실패했습니다: ${error.message}`, true);
     window.alert(`가져오기에 실패했습니다: ${error.message}`);
   } finally {
     event.target.value = "";
   }
 }
 
-async function resetSites() {
-  const confirmed = window.confirm("현재 브라우저에 저장된 목록을 샘플 데이터로 되돌릴까요?");
-  if (!confirmed) return;
+async function refreshSitesFromSheet() {
+  await loadSites({ silent: true });
+}
 
-  state.sites = normalizeSiteList(await loadDefaultSites());
-  state.favorites.clear();
-  state.recent = [];
-  removeStoredItem(storageKeys.sites);
-  saveFavorites();
-  saveRecent();
-  renderCategories();
-  render();
+function canWriteToSheet() {
+  if (apiUrl) return true;
+
+  const message =
+    "사이트 추가/수정/삭제를 모든 기기에 반영하려면 config.js의 apiUrl에 Google Apps Script 웹앱 URL을 설정해야 합니다.";
+  setSyncStatus(message, true);
+  window.alert(message);
+  return false;
+}
+
+function scheduleSheetRefresh() {
+  window.setTimeout(() => {
+    loadSites({ silent: true });
+  }, 1500);
+}
+
+function setSyncStatus(message, isError = false) {
+  if (!elements.syncStatus) return;
+  elements.syncStatus.textContent = message;
+  elements.syncStatus.classList.toggle("error", isError);
+}
+
+function updateStorageLabel() {
+  if (!elements.storageLabel) return;
+  elements.storageLabel.textContent = apiUrl ? "Sheet API" : "Sheet";
+}
+
+function focusSearch() {
+  elements.search.focus();
+  elements.search.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 elements.search.addEventListener("input", (event) => {
   state.query = event.target.value;
   render();
 });
-
-function focusSearch() {
-  elements.search.focus();
-  elements.search.scrollIntoView({ behavior: "smooth", block: "center" });
-}
 
 elements.focusSearchButton.addEventListener("click", focusSearch);
 elements.mobileFocusSearchButton.addEventListener("click", focusSearch);
@@ -625,7 +855,7 @@ elements.mobileCreateButton.addEventListener("click", () => openEditor());
 elements.emptyCreateButton.addEventListener("click", () => openEditor());
 elements.exportButton.addEventListener("click", exportSites);
 elements.importFile.addEventListener("change", importSites);
-elements.resetButton.addEventListener("click", resetSites);
+elements.resetButton.addEventListener("click", refreshSitesFromSheet);
 elements.form.addEventListener("submit", handleFormSubmit);
 elements.closeDialogButton.addEventListener("click", closeEditor);
 elements.cancelDialogButton.addEventListener("click", closeEditor);
