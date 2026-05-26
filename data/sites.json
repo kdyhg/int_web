@@ -11,6 +11,7 @@
       "repoUrl": "https://github.com/kdyhg",
       "docsUrl": "",
       "healthUrl": "https://example.com",
+      "imageUrl": "",
       "memo": "새 프로젝트를 올린 뒤 첫 화면과 모바일 레이아웃을 확인합니다."
     },
     {
@@ -24,6 +25,7 @@
       "repoUrl": "",
       "docsUrl": "",
       "healthUrl": "https://example.com/blog",
+      "imageUrl": "",
       "memo": "글 작성 전 임시 저장 여부와 이미지 경로를 확인합니다."
     },
     {
@@ -37,6 +39,7 @@
       "repoUrl": "https://github.com/kdyhg/Int_web",
       "docsUrl": "",
       "healthUrl": "https://example.com/lab",
+      "imageUrl": "",
       "memo": "실험용 링크는 공개 범위를 다시 확인합니다."
     }
   ]

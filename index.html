@@ -5,118 +5,222 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="자주 사용하는 개인 제작 사이트를 한 곳에서 관리하는 통합 웹 대시보드"
+      content="내가 만든 사이트를 카드 형태로 추가, 수정, 삭제하고 빠르게 접속하는 개인 통합 웹 대시보드"
     />
-    <title>Int Web Dashboard</title>
+    <title>Int Web Studio</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="app-shell">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">Personal site hub</p>
-          <h1>Int Web Dashboard</h1>
-        </div>
-        <div class="topbar-actions">
-          <button class="ghost-button" id="focusSearchButton" type="button">검색</button>
-          <a class="primary-button" href="data/sites.json" target="_blank" rel="noreferrer">
-            사이트 데이터
-          </a>
-        </div>
-      </header>
-
-      <main>
-        <section class="hero-panel">
-          <div class="hero-copy">
-            <p class="eyebrow">Unified launcher</p>
-            <h2>내가 만든 사이트를 빠르게 찾고, 상태까지 한눈에 봅니다.</h2>
-            <p>
-              운영 중인 사이트, 관리자 페이지, 저장소, 문서를 한 카드에 묶었습니다.
-              `data/sites.json`만 고치면 내 사이트 목록으로 바로 바꿀 수 있습니다.
-            </p>
-          </div>
-          <div class="hero-search">
-            <label for="siteSearch">사이트 검색</label>
-            <input
-              id="siteSearch"
-              type="search"
-              placeholder="사이트명, 태그, 설명으로 검색"
-              autocomplete="off"
-            />
-            <span class="shortcut">Ctrl + K</span>
-          </div>
-        </section>
-
-        <section class="metrics-grid" aria-label="대시보드 요약">
-          <article>
-            <span>전체 사이트</span>
-            <strong id="totalCount">0</strong>
-          </article>
-          <article>
-            <span>즐겨찾기</span>
-            <strong id="favoriteCount">0</strong>
-          </article>
-          <article>
-            <span>최근 방문</span>
-            <strong id="recentCount">0</strong>
-          </article>
-          <article>
-            <span>마지막 동기화</span>
-            <strong id="syncTime">-</strong>
-          </article>
-        </section>
-
-        <section class="workspace">
-          <aside class="sidebar" aria-label="사이트 필터">
-            <div>
-              <p class="section-label">카테고리</p>
-              <div class="filter-list" id="categoryFilters"></div>
-            </div>
-            <div>
-              <p class="section-label">빠른 보기</p>
-              <div class="filter-list">
-                <button class="filter-button active" type="button" data-view="all">전체</button>
-                <button class="filter-button" type="button" data-view="favorites">즐겨찾기</button>
-                <button class="filter-button" type="button" data-view="recent">최근 방문</button>
-              </div>
-            </div>
-          </aside>
-
-          <section class="site-area" aria-live="polite">
-            <div class="section-heading">
-              <div>
-                <p class="section-label">Sites</p>
-                <h2 id="resultTitle">전체 사이트</h2>
-              </div>
-              <span id="resultCount">0개</span>
-            </div>
-            <div class="site-grid" id="siteGrid"></div>
-            <div class="empty-state hidden" id="emptyState">
-              <strong>조건에 맞는 사이트가 없습니다.</strong>
-              <p>검색어를 줄이거나 다른 카테고리를 선택해보세요.</p>
-            </div>
-          </section>
-        </section>
-      </main>
+    <div class="utility-bar">
+      <div class="page-frame utility-inner">
+        <span>Private local dashboard</span>
+        <span>사이트 목록은 이 브라우저에 저장됩니다.</span>
+      </div>
     </div>
+
+    <header class="primary-nav">
+      <div class="page-frame nav-inner">
+        <a class="brand-mark" href="#top" aria-label="Int Web 홈">IW</a>
+        <nav class="nav-links" aria-label="주요 메뉴">
+          <a href="#sites">Sites</a>
+          <a href="#manage">Manage</a>
+          <a href="#backup">Backup</a>
+        </nav>
+        <div class="nav-actions">
+          <button class="icon-button" id="focusSearchButton" type="button" aria-label="검색으로 이동">⌕</button>
+          <button class="button-primary compact" id="openCreateTopButton" type="button">추가</button>
+        </div>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="page-frame campaign-tile" aria-labelledby="heroTitle">
+        <div class="campaign-copy">
+          <p class="eyebrow">Unified launcher</p>
+          <h1 id="heroTitle">YOUR WEB<br />IN ONE PLACE</h1>
+          <p>
+            내가 만든 사이트, 관리자 페이지, 저장소, 문서를 하나의 카드형 런처에서 관리합니다.
+            추가와 삭제는 이 브라우저에 즉시 저장됩니다.
+          </p>
+          <div class="campaign-actions" id="manage">
+            <button class="button-on-image" id="openCreateButton" type="button">사이트 추가</button>
+            <button class="button-on-image secondary-on-image" id="exportButton" type="button">
+              JSON 내보내기
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-frame control-panel" id="backup" aria-label="사이트 관리 도구">
+        <div class="search-wrap">
+          <label for="siteSearch">Search</label>
+          <input
+            id="siteSearch"
+            class="search-pill"
+            type="search"
+            placeholder="사이트명, 태그, 설명으로 검색"
+            autocomplete="off"
+          />
+        </div>
+
+        <div class="panel-actions">
+          <label class="button-secondary file-button">
+            JSON 가져오기
+            <input id="importFile" type="file" accept="application/json,.json" />
+          </label>
+          <button class="button-secondary" id="resetButton" type="button">샘플 복원</button>
+        </div>
+      </section>
+
+      <section class="page-frame metrics-row" aria-label="대시보드 요약">
+        <article>
+          <span>전체 사이트</span>
+          <strong id="totalCount">0</strong>
+        </article>
+        <article>
+          <span>즐겨찾기</span>
+          <strong id="favoriteCount">0</strong>
+        </article>
+        <article>
+          <span>최근 방문</span>
+          <strong id="recentCount">0</strong>
+        </article>
+        <article>
+          <span>저장 위치</span>
+          <strong>Local</strong>
+        </article>
+      </section>
+
+      <section class="page-frame listing-layout" id="sites">
+        <aside class="filter-sidebar" aria-label="사이트 필터">
+          <div>
+            <p class="filter-heading">보기</p>
+            <div class="chip-list">
+              <button class="filter-chip active" type="button" data-view="all">전체</button>
+              <button class="filter-chip" type="button" data-view="favorites">즐겨찾기</button>
+              <button class="filter-chip" type="button" data-view="recent">최근 방문</button>
+            </div>
+          </div>
+          <div>
+            <p class="filter-heading">카테고리</p>
+            <div class="chip-list" id="categoryFilters"></div>
+          </div>
+        </aside>
+
+        <section class="product-list" aria-live="polite">
+          <div class="section-title-row">
+            <div>
+              <p class="eyebrow">Card grid</p>
+              <h2 id="resultTitle">전체 사이트</h2>
+            </div>
+            <span id="resultCount">0개</span>
+          </div>
+
+          <div class="site-grid" id="siteGrid"></div>
+
+          <div class="empty-state hidden" id="emptyState">
+            <strong>조건에 맞는 사이트가 없습니다.</strong>
+            <p>검색어를 줄이거나 다른 카테고리를 선택해보세요.</p>
+            <button class="button-primary" id="emptyCreateButton" type="button">사이트 추가</button>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <dialog class="site-dialog" id="siteDialog">
+      <form class="site-form" id="siteForm" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Manage site</p>
+            <h2 id="dialogTitle">사이트 추가</h2>
+          </div>
+          <button class="icon-button" id="closeDialogButton" type="button" aria-label="닫기">×</button>
+        </div>
+
+        <input id="siteId" name="id" type="hidden" />
+
+        <div class="form-grid">
+          <label>
+            사이트 이름
+            <input id="siteName" name="name" type="text" placeholder="Portfolio" required />
+          </label>
+          <label>
+            대표 URL
+            <input id="siteUrl" name="url" type="url" placeholder="https://example.com" required />
+          </label>
+          <label>
+            카테고리
+            <input id="siteCategory" name="category" type="text" placeholder="production" />
+          </label>
+          <label>
+            태그
+            <input id="siteTags" name="tags" type="text" placeholder="portfolio, admin, docs" />
+          </label>
+          <label class="wide">
+            설명
+            <textarea id="siteDescription" name="description" rows="3" placeholder="이 사이트의 용도"></textarea>
+          </label>
+          <label class="wide">
+            카드 이미지 URL
+            <input id="siteImageUrl" name="imageUrl" type="url" placeholder="https://..." />
+          </label>
+          <label>
+            관리자 URL
+            <input id="siteAdminUrl" name="adminUrl" type="url" placeholder="https://example.com/admin" />
+          </label>
+          <label>
+            GitHub URL
+            <input id="siteRepoUrl" name="repoUrl" type="url" placeholder="https://github.com/..." />
+          </label>
+          <label>
+            문서 URL
+            <input id="siteDocsUrl" name="docsUrl" type="url" placeholder="https://..." />
+          </label>
+          <label>
+            상태 확인 URL
+            <input id="siteHealthUrl" name="healthUrl" type="url" placeholder="https://example.com/api/health" />
+          </label>
+          <label class="wide">
+            메모
+            <textarea id="siteMemo" name="memo" rows="3" placeholder="배포 전 확인할 점, 계정 위치 등"></textarea>
+          </label>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="button-secondary danger" id="deleteFromDialogButton" type="button">삭제</button>
+          <span></span>
+          <button class="button-secondary" id="cancelDialogButton" type="button">취소</button>
+          <button class="button-primary" type="submit">저장</button>
+        </div>
+      </form>
+    </dialog>
 
     <template id="siteCardTemplate">
       <article class="site-card">
-        <div class="card-header">
-          <div>
-            <span class="category-pill"></span>
-            <h3></h3>
+        <div class="card-visual">
+          <img class="site-image" alt="" />
+          <div class="visual-fallback">
+            <span class="visual-initial"></span>
+            <small class="visual-category"></small>
           </div>
           <button class="favorite-button" type="button" aria-label="즐겨찾기 토글"></button>
         </div>
-        <p class="description"></p>
-        <div class="tag-list"></div>
-        <p class="memo"></p>
-        <div class="status-row">
-          <span class="status-dot" aria-hidden="true"></span>
-          <span class="status-text">상태 미확인</span>
+
+        <div class="card-copy">
+          <div class="card-meta-row">
+            <span class="category-pill"></span>
+            <span class="visit-count"></span>
+          </div>
+          <h3></h3>
+          <p class="description"></p>
+          <div class="tag-list"></div>
+          <p class="memo"></p>
+          <div class="status-row">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span class="status-text">상태 미확인</span>
+          </div>
+          <div class="card-actions"></div>
         </div>
-        <div class="card-actions"></div>
       </article>
     </template>
 

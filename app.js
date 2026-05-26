@@ -1,3 +1,9 @@
+const storageKeys = {
+  sites: "intweb:sites",
+  favorites: "intweb:favorites",
+  recent: "intweb:recent",
+};
+
 const fallbackSites = [
   {
     id: "portfolio",
@@ -10,6 +16,7 @@ const fallbackSites = [
     repoUrl: "https://github.com/kdyhg",
     docsUrl: "",
     healthUrl: "https://example.com",
+    imageUrl: "",
     memo: "새 프로젝트를 올린 뒤 첫 화면과 모바일 레이아웃을 확인합니다.",
   },
   {
@@ -23,6 +30,7 @@ const fallbackSites = [
     repoUrl: "",
     docsUrl: "",
     healthUrl: "https://example.com/blog",
+    imageUrl: "",
     memo: "글 작성 전 임시 저장 여부와 이미지 경로를 확인합니다.",
   },
   {
@@ -36,6 +44,7 @@ const fallbackSites = [
     repoUrl: "https://github.com/kdyhg/Int_web",
     docsUrl: "",
     healthUrl: "https://example.com/lab",
+    imageUrl: "",
     memo: "실험용 링크는 공개 범위를 다시 확인합니다.",
   },
 ];
@@ -45,8 +54,9 @@ const state = {
   query: "",
   category: "all",
   view: "all",
-  favorites: new Set(JSON.parse(localStorage.getItem("intweb:favorites") || "[]")),
-  recent: JSON.parse(localStorage.getItem("intweb:recent") || "[]"),
+  editingId: null,
+  favorites: new Set(readJson(storageKeys.favorites, [])),
+  recent: readJson(storageKeys.recent, []),
 };
 
 const elements = {
@@ -60,8 +70,19 @@ const elements = {
   totalCount: document.querySelector("#totalCount"),
   favoriteCount: document.querySelector("#favoriteCount"),
   recentCount: document.querySelector("#recentCount"),
-  syncTime: document.querySelector("#syncTime"),
   focusSearchButton: document.querySelector("#focusSearchButton"),
+  openCreateButton: document.querySelector("#openCreateButton"),
+  openCreateTopButton: document.querySelector("#openCreateTopButton"),
+  emptyCreateButton: document.querySelector("#emptyCreateButton"),
+  exportButton: document.querySelector("#exportButton"),
+  importFile: document.querySelector("#importFile"),
+  resetButton: document.querySelector("#resetButton"),
+  dialog: document.querySelector("#siteDialog"),
+  form: document.querySelector("#siteForm"),
+  dialogTitle: document.querySelector("#dialogTitle"),
+  closeDialogButton: document.querySelector("#closeDialogButton"),
+  cancelDialogButton: document.querySelector("#cancelDialogButton"),
+  deleteFromDialogButton: document.querySelector("#deleteFromDialogButton"),
 };
 
 const categoryLabels = {
@@ -74,6 +95,20 @@ const categoryLabels = {
 };
 
 async function loadSites() {
+  const storedSites = readJson(storageKeys.sites, null);
+
+  if (Array.isArray(storedSites)) {
+    state.sites = normalizeSiteList(storedSites);
+  } else {
+    state.sites = normalizeSiteList(await loadDefaultSites());
+  }
+
+  cleanStoredReferences();
+  renderCategories();
+  render();
+}
+
+async function loadDefaultSites() {
   try {
     const response = await fetch("data/sites.json", { cache: "no-store" });
     if (!response.ok) {
@@ -81,28 +116,144 @@ async function loadSites() {
     }
 
     const data = await response.json();
-    state.sites = Array.isArray(data.sites) ? data.sites : fallbackSites;
+    return Array.isArray(data.sites) ? data.sites : fallbackSites;
   } catch (error) {
     console.info("Fallback site data loaded:", error.message);
-    state.sites = fallbackSites;
+    return fallbackSites;
+  }
+}
+
+function readJson(key, fallback) {
+  try {
+    const storage = getStorage();
+    if (!storage) return fallback;
+
+    const rawValue = storage.getItem(key);
+    return rawValue ? JSON.parse(rawValue) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function getStorage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function writeJson(key, value) {
+  const storage = getStorage();
+  if (!storage) return;
+
+  storage.setItem(key, JSON.stringify(value));
+}
+
+function removeStoredItem(key) {
+  const storage = getStorage();
+  if (!storage) return;
+
+  storage.removeItem(key);
+}
+
+function normalizeSiteList(sites) {
+  const usedIds = new Set();
+
+  return sites.map((site, index) => {
+    const normalized = normalizeSite(site);
+    const baseId = normalized.id || createSlug(normalized.name || `site-${index + 1}`);
+    normalized.id = makeUniqueId(baseId, usedIds);
+    usedIds.add(normalized.id);
+    return normalized;
+  });
+}
+
+function normalizeSite(site) {
+  return {
+    id: typeof site.id === "string" ? site.id.trim() : "",
+    name: typeof site.name === "string" ? site.name.trim() : "Untitled Site",
+    description: typeof site.description === "string" ? site.description.trim() : "",
+    category: typeof site.category === "string" && site.category.trim() ? site.category.trim() : "production",
+    tags: normalizeTags(site.tags),
+    url: typeof site.url === "string" ? site.url.trim() : "",
+    adminUrl: typeof site.adminUrl === "string" ? site.adminUrl.trim() : "",
+    repoUrl: typeof site.repoUrl === "string" ? site.repoUrl.trim() : "",
+    docsUrl: typeof site.docsUrl === "string" ? site.docsUrl.trim() : "",
+    healthUrl: typeof site.healthUrl === "string" ? site.healthUrl.trim() : "",
+    imageUrl: typeof site.imageUrl === "string" ? site.imageUrl.trim() : "",
+    memo: typeof site.memo === "string" ? site.memo.trim() : "",
+  };
+}
+
+function normalizeTags(tags) {
+  if (Array.isArray(tags)) {
+    return tags.map((tag) => String(tag).trim()).filter(Boolean);
   }
 
-  elements.syncTime.textContent = new Intl.DateTimeFormat("ko-KR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date());
+  if (typeof tags === "string") {
+    return tags
+      .split(",")
+      .map((tag) => tag.trim().replace(/^#/, ""))
+      .filter(Boolean);
+  }
 
-  renderCategories();
-  render();
+  return [];
+}
+
+function createSlug(value) {
+  const slug = value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9가-힣]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return slug || `site-${Date.now()}`;
+}
+
+function makeUniqueId(baseId, usedIds, currentId = "") {
+  let candidate = baseId || `site-${Date.now()}`;
+  let counter = 2;
+
+  while (usedIds.has(candidate) && candidate !== currentId) {
+    candidate = `${baseId}-${counter}`;
+    counter += 1;
+  }
+
+  return candidate;
+}
+
+function saveSites() {
+  writeJson(storageKeys.sites, state.sites);
+}
+
+function saveFavorites() {
+  writeJson(storageKeys.favorites, [...state.favorites]);
+}
+
+function saveRecent() {
+  writeJson(storageKeys.recent, state.recent);
+}
+
+function cleanStoredReferences() {
+  const siteIds = new Set(state.sites.map((site) => site.id));
+  state.favorites = new Set([...state.favorites].filter((id) => siteIds.has(id)));
+  state.recent = state.recent.filter((id) => siteIds.has(id));
+  saveFavorites();
+  saveRecent();
 }
 
 function renderCategories() {
   const categories = ["all", ...new Set(state.sites.map((site) => site.category).filter(Boolean))];
+  if (state.category !== "all" && !categories.includes(state.category)) {
+    state.category = "all";
+  }
+
   elements.categoryFilters.innerHTML = "";
 
   categories.forEach((category) => {
     const button = document.createElement("button");
-    button.className = "filter-button";
+    button.className = "filter-chip";
     button.type = "button";
     button.dataset.category = category;
     button.textContent = categoryLabels[category] || category;
@@ -168,18 +319,40 @@ function createSiteCard(site) {
   const statusRow = card.querySelector(".status-row");
   const statusText = card.querySelector(".status-text");
   const favoriteButton = card.querySelector(".favorite-button");
+  const image = card.querySelector(".site-image");
+  const fallback = card.querySelector(".visual-fallback");
+  const initial = card.querySelector(".visual-initial");
+  const visualCategory = card.querySelector(".visual-category");
 
   card.querySelector(".category-pill").textContent = categoryLabels[site.category] || site.category;
   card.querySelector("h3").textContent = site.name;
-  card.querySelector(".description").textContent = site.description;
-  card.querySelector(".memo").textContent = site.memo || "메모가 없습니다.";
+  card.querySelector(".description").textContent = site.description || "설명이 없습니다.";
+  card.querySelector(".memo").textContent = site.memo || "메모 없음";
+  card.querySelector(".visit-count").textContent = state.recent.includes(site.id) ? "recent" : "";
+
+  initial.textContent = getInitials(site.name);
+  visualCategory.textContent = site.category;
+
+  if (site.imageUrl) {
+    image.src = site.imageUrl;
+    image.alt = `${site.name} 카드 이미지`;
+    image.hidden = false;
+    fallback.hidden = true;
+    image.addEventListener("error", () => {
+      image.hidden = true;
+      fallback.hidden = false;
+    });
+  } else {
+    image.hidden = true;
+    fallback.hidden = false;
+  }
 
   favoriteButton.textContent = state.favorites.has(site.id) ? "★" : "☆";
   favoriteButton.classList.toggle("active", state.favorites.has(site.id));
   favoriteButton.addEventListener("click", () => toggleFavorite(site.id));
 
   const tagList = card.querySelector(".tag-list");
-  (site.tags || []).forEach((tag) => {
+  (site.tags || []).slice(0, 5).forEach((tag) => {
     const tagElement = document.createElement("span");
     tagElement.className = "tag";
     tagElement.textContent = `#${tag}`;
@@ -199,15 +372,24 @@ function createSiteCard(site) {
   });
 
   if (site.healthUrl) {
-    const healthButton = document.createElement("button");
-    healthButton.className = "link-button";
-    healthButton.type = "button";
-    healthButton.textContent = "상태 점검";
-    healthButton.addEventListener("click", () => checkHealth(site.healthUrl, statusRow, statusText));
+    const healthButton = createActionButton("상태", () => checkHealth(site.healthUrl, statusRow, statusText));
     actions.append(healthButton);
   }
 
+  actions.append(createActionButton("수정", () => openEditor(site)));
+  actions.append(createActionButton("삭제", () => deleteSite(site.id), "danger-link"));
+
   return card;
+}
+
+function getInitials(name) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word.charAt(0))
+    .join("")
+    .toUpperCase();
 }
 
 function getLinks(site) {
@@ -219,6 +401,15 @@ function getLinks(site) {
   ].filter((link) => link.url);
 }
 
+function createActionButton(label, onClick, extraClass = "") {
+  const button = document.createElement("button");
+  button.className = `link-button ${extraClass}`.trim();
+  button.type = "button";
+  button.textContent = label;
+  button.addEventListener("click", onClick);
+  return button;
+}
+
 function toggleFavorite(siteId) {
   if (state.favorites.has(siteId)) {
     state.favorites.delete(siteId);
@@ -226,13 +417,13 @@ function toggleFavorite(siteId) {
     state.favorites.add(siteId);
   }
 
-  localStorage.setItem("intweb:favorites", JSON.stringify([...state.favorites]));
+  saveFavorites();
   render();
 }
 
 function markRecent(siteId) {
   state.recent = [siteId, ...state.recent.filter((id) => id !== siteId)].slice(0, 8);
-  localStorage.setItem("intweb:recent", JSON.stringify(state.recent));
+  saveRecent();
   render();
 }
 
@@ -251,7 +442,7 @@ async function checkHealth(url, row, text) {
     });
     row.className = "status-row online";
     text.textContent = "접속 가능";
-  } catch (error) {
+  } catch {
     row.className = "status-row offline";
     text.textContent = "확인 실패";
   } finally {
@@ -266,14 +457,170 @@ function getResultTitle() {
   return state.query ? "검색 결과" : "전체 사이트";
 }
 
+function openEditor(site = null) {
+  state.editingId = site ? site.id : null;
+  elements.dialogTitle.textContent = site ? "사이트 수정" : "사이트 추가";
+  elements.form.reset();
+
+  const values = site || {
+    id: "",
+    name: "",
+    url: "",
+    category: "",
+    tags: [],
+    description: "",
+    imageUrl: "",
+    adminUrl: "",
+    repoUrl: "",
+    docsUrl: "",
+    healthUrl: "",
+    memo: "",
+  };
+
+  setField("siteId", values.id);
+  setField("siteName", values.name);
+  setField("siteUrl", values.url);
+  setField("siteCategory", values.category);
+  setField("siteTags", (values.tags || []).join(", "));
+  setField("siteDescription", values.description);
+  setField("siteImageUrl", values.imageUrl);
+  setField("siteAdminUrl", values.adminUrl);
+  setField("siteRepoUrl", values.repoUrl);
+  setField("siteDocsUrl", values.docsUrl);
+  setField("siteHealthUrl", values.healthUrl);
+  setField("siteMemo", values.memo);
+  elements.deleteFromDialogButton.hidden = !site;
+
+  if (typeof elements.dialog.showModal === "function") {
+    elements.dialog.showModal();
+  } else {
+    elements.dialog.setAttribute("open", "");
+  }
+
+  document.querySelector("#siteName").focus();
+}
+
+function setField(id, value) {
+  document.querySelector(`#${id}`).value = value || "";
+}
+
+function closeEditor() {
+  elements.dialog.close();
+}
+
+function handleFormSubmit(event) {
+  event.preventDefault();
+
+  const formData = new FormData(elements.form);
+  const rawSite = Object.fromEntries(formData.entries());
+  rawSite.tags = normalizeTags(rawSite.tags);
+
+  const site = normalizeSite(rawSite);
+  const usedIds = new Set(state.sites.map((item) => item.id));
+  const existing = state.sites.find((item) => item.id === state.editingId);
+  const baseId = existing ? existing.id : createSlug(site.name);
+  site.id = makeUniqueId(baseId, usedIds, existing ? existing.id : "");
+
+  if (existing) {
+    state.sites = state.sites.map((item) => (item.id === existing.id ? site : item));
+  } else {
+    state.sites = [site, ...state.sites];
+  }
+
+  saveSites();
+  renderCategories();
+  render();
+  closeEditor();
+}
+
+function deleteSite(siteId) {
+  const site = state.sites.find((item) => item.id === siteId);
+  if (!site) return;
+
+  const confirmed = window.confirm(`"${site.name}" 사이트를 삭제할까요?`);
+  if (!confirmed) return;
+
+  state.sites = state.sites.filter((item) => item.id !== siteId);
+  state.favorites.delete(siteId);
+  state.recent = state.recent.filter((id) => id !== siteId);
+  saveSites();
+  saveFavorites();
+  saveRecent();
+
+  if (state.editingId === siteId && elements.dialog.open) {
+    closeEditor();
+  }
+
+  renderCategories();
+  render();
+}
+
+function exportSites() {
+  const payload = JSON.stringify({ sites: state.sites }, null, 2);
+  const blob = new Blob([payload], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "int-web-sites.json";
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+async function importSites(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const rawText = await file.text();
+    const parsed = JSON.parse(rawText);
+    const importedSites = Array.isArray(parsed) ? parsed : parsed.sites;
+
+    if (!Array.isArray(importedSites)) {
+      throw new Error("sites 배열이 없습니다.");
+    }
+
+    state.sites = normalizeSiteList(importedSites);
+    saveSites();
+    cleanStoredReferences();
+    renderCategories();
+    render();
+  } catch (error) {
+    window.alert(`가져오기에 실패했습니다: ${error.message}`);
+  } finally {
+    event.target.value = "";
+  }
+}
+
+async function resetSites() {
+  const confirmed = window.confirm("현재 브라우저에 저장된 목록을 샘플 데이터로 되돌릴까요?");
+  if (!confirmed) return;
+
+  state.sites = normalizeSiteList(await loadDefaultSites());
+  state.favorites.clear();
+  state.recent = [];
+  removeStoredItem(storageKeys.sites);
+  saveFavorites();
+  saveRecent();
+  renderCategories();
+  render();
+}
+
 elements.search.addEventListener("input", (event) => {
   state.query = event.target.value;
   render();
 });
 
-elements.focusSearchButton.addEventListener("click", () => {
-  elements.search.focus();
-});
+elements.focusSearchButton.addEventListener("click", () => elements.search.focus());
+elements.openCreateButton.addEventListener("click", () => openEditor());
+elements.openCreateTopButton.addEventListener("click", () => openEditor());
+elements.emptyCreateButton.addEventListener("click", () => openEditor());
+elements.exportButton.addEventListener("click", exportSites);
+elements.importFile.addEventListener("change", importSites);
+elements.resetButton.addEventListener("click", resetSites);
+elements.form.addEventListener("submit", handleFormSubmit);
+elements.closeDialogButton.addEventListener("click", closeEditor);
+elements.cancelDialogButton.addEventListener("click", closeEditor);
+elements.deleteFromDialogButton.addEventListener("click", () => deleteSite(state.editingId));
 
 document.querySelectorAll("[data-view]").forEach((button) => {
   button.addEventListener("click", () => {
